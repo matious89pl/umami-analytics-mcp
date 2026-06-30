@@ -1,6 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import type { ResolvedScopes } from "./capabilities";
+import { registerPrompts } from "./prompts/index";
+import { registerResources } from "./resources/index";
+import { registerEventReadTools } from "./tools/events";
+import { registerMeTool } from "./tools/me";
+import { registerMetricsReadTools } from "./tools/metrics";
+import { registerReportReadTools } from "./tools/reports";
+import { registerSegmentReadTools } from "./tools/segments";
+import { registerSessionReadTools } from "./tools/sessions";
+import { registerStatsReadTools } from "./tools/stats";
+import { registerTeamReadTools } from "./tools/teams";
+import { registerWebsiteReadTools } from "./tools/websites";
 import type { UmamiClient } from "./umami/client";
 import type { Deployment } from "./umami/types";
 import { VERSION, SERVER_NAME } from "./version";
@@ -32,8 +43,25 @@ export interface UmamiContext {
  * standalone HTTP, Vercel `mcp-handler`), so the tool surface can never drift
  * between local and hosted modes.
  */
-export function registerAll(_server: McpServer, _ctx: UmamiContext): void {
-  // Tools/resources/prompts are registered here in Phase 3+.
+export function registerAll(server: McpServer, ctx: UmamiContext): void {
+  // ── Read tier (always on) ──────────────────────────────────────────────────
+  registerWebsiteReadTools(server, ctx);
+  registerStatsReadTools(server, ctx);
+  registerMetricsReadTools(server, ctx);
+  registerEventReadTools(server, ctx);
+  registerSessionReadTools(server, ctx);
+  registerReportReadTools(server, ctx);
+  registerSegmentReadTools(server, ctx);
+  registerTeamReadTools(server, ctx);
+  registerMeTool(server, ctx);
+
+  registerResources(server, ctx);
+  registerPrompts(server, ctx);
+
+  // ── Write tier ─────────────────────────────────────────────────────────────
+  // Wired in Phase 4: if (ctx.scopes.write) registerWriteTools(server, ctx);
+  // ── Admin tier ─────────────────────────────────────────────────────────────
+  // Wired in Phase 4: if (ctx.scopes.admin) registerAdminTools(server, ctx);
 }
 
 /**
