@@ -1,18 +1,28 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
+import type { ResolvedScopes } from "./capabilities";
+import type { UmamiClient } from "./umami/client";
+import type { Deployment } from "./umami/types";
 import { VERSION, SERVER_NAME } from "./version";
 
 /**
  * Runtime context shared by every tool/resource/prompt handler.
  *
- * Built once from environment + flags (see {@link file://./config.ts}) and
- * threaded through {@link registerAll}. Tools close over this object; they never
- * read credentials from the environment directly. Expanded in Phase 2 to carry
- * the configured Umami client and resolved capability scopes.
+ * Built once from environment + flags (see config.ts) and threaded through
+ * {@link registerAll}. Tools close over this object; they never read credentials
+ * from the environment directly.
  */
 export interface UmamiContext {
-  // Phase 2: umami client, scopes, defaults.
-  readonly placeholder?: never;
+  /** Configured Umami API client (handles auth, throttling, redaction). */
+  readonly umami: UmamiClient;
+  /** Effective capability tiers controlling which tools are registered. */
+  readonly scopes: ResolvedScopes;
+  /** Cloud vs self-hosted — gates admin tools and informs error hints. */
+  readonly deployment: Deployment;
+  readonly defaults: {
+    /** IANA timezone applied to time-series tools unless overridden per call. */
+    readonly timezone: string;
+  };
 }
 
 /**
