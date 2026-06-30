@@ -17,11 +17,24 @@ import {
   websiteIdShape,
 } from "./shared";
 
-/** Reports are POST-with-body **reads** — they compute analytics without
- * mutating anything. The write-tier is not required for these. */
+/**
+ * Reports are POST-with-body **reads**. Umami v3 expects:
+ *   { websiteId, type, filters, parameters: { startDate, endDate, ...specific } }
+ * where startDate/endDate are ISO strings inside `parameters`. The write tier is
+ * not required for these.
+ */
 export function registerReportReadTools(server: McpServer, ctx: UmamiContext): void {
-  const post = (kind: string, body: Record<string, unknown>) =>
-    ctx.umami.post<unknown>(`/reports/${kind}`, body);
+  const isoRange = (args: { range?: string; startAt?: string | number; endAt?: string | number }) => {
+    const { startAt, endAt } = resolveRange(args);
+    return { startDate: new Date(startAt).toISOString(), endDate: new Date(endAt).toISOString() };
+  };
+
+  const runReport = (
+    type: string,
+    websiteId: string,
+    parameters: Record<string, unknown>,
+    filters: Record<string, string> = {},
+  ) => ctx.umami.post<unknown>(`/reports/${type}`, { websiteId, type, filters, parameters });
 
   reg(
     server,
@@ -29,28 +42,32 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
     {
       title: "Funnel report",
       description:
-        "Conversion funnel across an ordered list of steps. Each step is { type: 'url' | 'event', value }. `window` is the conversion window in hours.",
+        "Conversion funnel across an ordered list of steps. Each step is { type: 'path' | 'event', value }. `window` is the conversion window (hours).",
       inputSchema: {
         ...websiteIdShape,
         ...dateRangeShape,
         steps: z
-          .array(z.object({ type: z.enum(["url", "event"]), value: z.string() }))
+          .array(z.object({ type: z.enum(["path", "url", "event"]), value: z.string() }))
           .min(2)
-          .describe("Ordered funnel steps (≥2)."),
+          .max(8)
+          .describe("Ordered funnel steps (2–8). Use type 'event' for custom events, 'path' for URLs."),
         window: z.number().int().positive().optional().describe("Conversion window in hours (default 24)."),
+        ...filterShape,
       },
       outputSchema: { data: z.unknown() },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const { startAt, endAt } = resolveRange(args);
-      const data = await post("funnel", {
-        websiteId: args.websiteId,
-        startAt,
-        endAt,
-        steps: args.steps,
-        window: args.window ?? 24,
-      });
+      const data = await runReport(
+        "funnel",
+        args.websiteId,
+        {
+          ...isoRange(args),
+          window: args.window ?? 24,
+          steps: args.steps.map((s) => ({ type: s.type === "url" ? "path" : s.type, value: s.value })),
+        },
+        pickFilters(args),
+      );
       return ok({ data }, `Funnel over ${args.steps.length} steps computed.`);
     },
   );
@@ -66,11 +83,8 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const { startAt, endAt } = resolveRange(args);
-      const data = await post("retention", {
-        websiteId: args.websiteId,
-        startAt,
-        endAt,
+      const data = await runReport("retention", args.websiteId, {
+        ...isoRange(args),
         timezone: tzOf(ctx, args.timezone),
       });
       return ok({ data }, "Retention report computed.");
@@ -82,23 +96,20 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
     "report_journey",
     {
       title: "User journey report",
-      description: "Most common navigation paths through the site, up to `steps` deep. Optionally pin a start or end step.",
+      description: "Most common navigation paths through the site, up to `steps` deep (2–7). Optionally pin a start or end step.",
       inputSchema: {
         ...websiteIdShape,
         ...dateRangeShape,
-        steps: z.number().int().min(2).max(10).optional().describe("Path depth (default 5)."),
-        startStep: z.string().optional().describe("Pin the first URL/path."),
-        endStep: z.string().optional().describe("Pin the final URL/path."),
+        steps: z.number().int().min(2).max(7).optional().describe("Path depth (default 5)."),
+        startStep: z.string().optional().describe("Pin the first URL/path or event."),
+        endStep: z.string().optional().describe("Pin the final URL/path or event."),
       },
       outputSchema: { data: z.unknown() },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const { startAt, endAt } = resolveRange(args);
-      const data = await post("journey", {
-        websiteId: args.websiteId,
-        startAt,
-        endAt,
+      const data = await runReport("journey", args.websiteId, {
+        ...isoRange(args),
         steps: args.steps ?? 5,
         startStep: args.startStep,
         endStep: args.endStep,
@@ -112,19 +123,30 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
     "report_goals",
     {
       title: "Goals report",
-      description: "Progress toward goals (URL or event targets). Provide goals as { type, value, operator?, goal? } objects.",
+      description:
+        "Progress toward one or more goals. Each goal is { type: 'event' | 'path', value }. Computed per goal against Umami's /reports/goal endpoint.",
       inputSchema: {
         ...websiteIdShape,
         ...dateRangeShape,
-        goals: z.array(z.record(z.string(), z.unknown())).min(1).describe("Goal definitions."),
+        goals: z
+          .array(z.object({ type: z.enum(["event", "path", "url"]), value: z.string() }))
+          .min(1)
+          .describe("Goal definitions, e.g. { type: 'event', value: 'export_completed' }."),
+        ...filterShape,
       },
-      outputSchema: { data: z.unknown() },
+      outputSchema: { data: z.array(z.unknown()) },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const { startAt, endAt } = resolveRange(args);
-      const data = await post("goals", { websiteId: args.websiteId, startAt, endAt, goals: args.goals });
-      return ok({ data }, `Goals report for ${args.goals.length} goal(s).`);
+      const range = isoRange(args);
+      const filters = pickFilters(args);
+      const results = [];
+      for (const g of args.goals) {
+        const type = g.type === "url" ? "path" : g.type;
+        const data = await runReport("goal", args.websiteId, { ...range, type, value: g.value }, filters);
+        results.push({ goal: { type, value: g.value }, result: data });
+      }
+      return ok({ data: results }, `Goals report for ${args.goals.length} goal(s).`);
     },
   );
 
@@ -133,27 +155,25 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
     "report_attribution",
     {
       title: "Attribution report",
-      description:
-        "Conversion attribution. `model` e.g. 'firstClick' | 'lastClick'; `type` the target dimension (e.g. 'url' or 'event'); `step` the target value.",
+      description: "Conversion attribution. `model` is first-click or last-click; `type` is the target dimension; `step` the target value.",
       inputSchema: {
         ...websiteIdShape,
         ...dateRangeShape,
-        model: z.string().describe("Attribution model, e.g. firstClick | lastClick."),
-        type: z.string().describe("Target dimension, e.g. url | event."),
-        step: z.string().optional().describe("Target value (the conversion)."),
+        model: z.enum(["first-click", "last-click"]).describe("Attribution model."),
+        type: z.enum(["path", "event"]).describe("Target dimension."),
+        step: z.string().describe("Target value (the conversion)."),
+        currency: z.string().optional(),
       },
       outputSchema: { data: z.unknown() },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const { startAt, endAt } = resolveRange(args);
-      const data = await post("attribution", {
-        websiteId: args.websiteId,
-        startAt,
-        endAt,
+      const data = await runReport("attribution", args.websiteId, {
+        ...isoRange(args),
         model: args.model,
         type: args.type,
         step: args.step,
+        currency: args.currency,
       });
       return ok({ data }, `Attribution (${args.model}) computed.`);
     },
@@ -164,25 +184,24 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
     "report_revenue",
     {
       title: "Revenue report",
-      description: "Revenue analytics over the period (requires revenue events configured in Umami).",
+      description: "Revenue analytics over the period (requires revenue events configured in Umami). `currency` is required (e.g. USD).",
       inputSchema: {
         ...websiteIdShape,
         ...dateRangeShape,
         ...timezoneShape,
-        currency: z.string().optional().describe("ISO currency code, e.g. USD."),
-        compare: z.string().optional(),
+        currency: z.string().describe("ISO currency code, e.g. USD."),
+        unit: z.enum(["minute", "hour", "day", "month", "year"]).optional(),
+        compare: z.enum(["prev", "yoy"]).optional(),
       },
       outputSchema: { data: z.unknown() },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const { startAt, endAt } = resolveRange(args);
-      const data = await post("revenue", {
-        websiteId: args.websiteId,
-        startAt,
-        endAt,
+      const data = await runReport("revenue", args.websiteId, {
+        ...isoRange(args),
         timezone: tzOf(ctx, args.timezone),
         currency: args.currency,
+        unit: args.unit,
         compare: args.compare,
       });
       return ok({ data }, "Revenue report computed.");
@@ -200,13 +219,7 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const { startAt, endAt } = resolveRange(args);
-      const data = await post("utm", {
-        websiteId: args.websiteId,
-        startAt,
-        endAt,
-        filters: pickFilters(args),
-      });
+      const data = await runReport("utm", args.websiteId, { ...isoRange(args) }, pickFilters(args));
       return ok({ data }, "UTM report computed.");
     },
   );
@@ -227,14 +240,12 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const { startAt, endAt } = resolveRange(args);
-      const data = await post("breakdown", {
-        websiteId: args.websiteId,
-        startAt,
-        endAt,
-        fields: args.fields,
-        filters: pickFilters(args),
-      });
+      const data = await runReport(
+        "breakdown",
+        args.websiteId,
+        { ...isoRange(args), fields: args.fields },
+        pickFilters(args),
+      );
       return ok({ data }, `Breakdown over ${args.fields.join(", ")}.`);
     },
   );
@@ -249,18 +260,15 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
         ...websiteIdShape,
         ...dateRangeShape,
         ...timezoneShape,
-        metric: z.string().optional().describe("Web vital, e.g. lcp | inp | cls | fcp | ttfb."),
+        metric: z.enum(["lcp", "inp", "cls", "fcp", "ttfb"]).optional(),
         unit: z.enum(["minute", "hour", "day", "month", "year"]).optional(),
       },
       outputSchema: { data: z.unknown() },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const { startAt, endAt } = resolveRange(args);
-      const data = await post("performance", {
-        websiteId: args.websiteId,
-        startAt,
-        endAt,
+      const data = await runReport("performance", args.websiteId, {
+        ...isoRange(args),
         timezone: tzOf(ctx, args.timezone),
         metric: args.metric,
         unit: args.unit,
@@ -274,7 +282,7 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
     "list_reports",
     {
       title: "List saved reports",
-      description: "List saved reports, optionally scoped to a website.",
+      description: "List saved reports (funnels, goals, journeys, etc.), optionally scoped to a website.",
       inputSchema: {
         websiteId: z.string().optional().describe("Scope to a website (optional)."),
         ...paginationShape,
@@ -290,7 +298,15 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
         search: args.search,
       });
       const data = asList(res);
-      return ok({ count: asCount(res, data.length), data }, `${num(asCount(res, data.length))} saved report(s).`);
+      const count = asCount(res, data.length);
+      const summary = data.length
+        ? `${num(count)} saved report(s):\n` +
+          data
+            .slice(0, 25)
+            .map((r) => `• [${(r as { type?: string }).type ?? "?"}] ${(r as { name?: string }).name ?? "(unnamed)"}`)
+            .join("\n")
+        : "No saved reports.";
+      return ok({ count, data }, summary);
     },
   );
 
@@ -299,7 +315,7 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
     "get_report",
     {
       title: "Get saved report",
-      description: "Fetch a saved report's definition by ID.",
+      description: "Fetch a saved report's full definition (type, parameters) by ID.",
       inputSchema: { reportId: z.string().min(1).describe("Saved report ID.") },
       outputSchema: { data: z.unknown() },
       annotations: { readOnlyHint: true },

@@ -137,6 +137,46 @@ describe("end-to-end tool behavior", () => {
     expect(captured?.headers["user-agent"]).toBeTruthy();
   });
 
+  it("report_funnel posts the Umami v3 body shape (type + parameters, ISO dates, path steps)", async () => {
+    let captured: { url: string; json: Record<string, unknown> } | undefined;
+    const fetchImpl = (async (url: unknown, init: RequestInit = {}) => {
+      captured = {
+        url: String(url),
+        json: typeof init.body === "string" ? JSON.parse(init.body) : {},
+      };
+      return new Response(JSON.stringify([]), { headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+
+    const client = await connect(makeContext(fetchImpl));
+    const res = await client.callTool({
+      name: "report_funnel",
+      arguments: {
+        websiteId: "w1",
+        range: "7d",
+        steps: [
+          { type: "url", value: "/" },
+          { type: "event", value: "export_completed" },
+        ],
+      },
+    });
+
+    expect(res.isError).toBeFalsy();
+    expect(captured?.url).toContain("/reports/funnel");
+    const body = captured!.json as {
+      type: string;
+      websiteId: string;
+      filters: unknown;
+      parameters: { startDate: unknown; endDate: unknown; steps: Array<{ type: string }> };
+    };
+    expect(body.type).toBe("funnel");
+    expect(body.websiteId).toBe("w1");
+    expect(typeof body.filters).toBe("object");
+    expect(typeof body.parameters.startDate).toBe("string"); // ISO, not epoch
+    expect(typeof body.parameters.endDate).toBe("string");
+    expect(body.parameters.steps[0]!.type).toBe("path"); // 'url' alias mapped to 'path'
+    expect(body.parameters.steps[1]!.type).toBe("event");
+  });
+
   it("returns tool errors as isError and never leaks the API key", async () => {
     registerSecret("test-key"); // the apiKey used by makeContext
     const fetchImpl = (async () =>
