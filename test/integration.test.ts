@@ -21,14 +21,20 @@ function jsonFetch(data: unknown): typeof fetch {
     })) as unknown as typeof fetch;
 }
 
-function makeContext(fetchImpl: typeof fetch, scopes: ResolvedScopes = READ_ONLY): UmamiContext {
+type Deployment = "cloud" | "self-hosted";
+
+function makeContext(
+  fetchImpl: typeof fetch,
+  scopes: ResolvedScopes = READ_ONLY,
+  deployment: Deployment = "cloud",
+): UmamiContext {
   const umami = new UmamiClient({
-    baseUrl: "https://api.umami.is/v1",
-    deployment: "cloud",
+    baseUrl: deployment === "cloud" ? "https://api.umami.is/v1" : "https://stats.example.com/api",
+    deployment,
     auth: { kind: "apiKey", apiKey: "test-key" },
     fetchImpl,
   });
-  return { umami, scopes, deployment: "cloud", defaults: { timezone: "UTC" } };
+  return { umami, scopes, deployment, defaults: { timezone: "UTC" } };
 }
 
 async function connect(ctx: UmamiContext): Promise<Client> {
@@ -38,6 +44,13 @@ async function connect(ctx: UmamiContext): Promise<Client> {
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return client;
 }
+
+async function toolNames(scopes: ResolvedScopes, deployment: Deployment = "cloud"): Promise<string[]> {
+  const client = await connect(makeContext(jsonFetch([]), scopes, deployment));
+  return (await client.listTools()).tools.map((t) => t.name);
+}
+
+const scopes = (over: Partial<ResolvedScopes>): ResolvedScopes => ({ ...READ_ONLY, ...over });
 
 describe("MCP server integration (in-memory)", () => {
   it("advertises read tools", async () => {
@@ -56,5 +69,41 @@ describe("MCP server integration (in-memory)", () => {
     expect(res.structuredContent).toMatchObject({ count: 1 });
     const text = (res.content as Array<{ type: string; text: string }>)[0]!.text;
     expect(text).toContain("My Site");
+  });
+});
+
+describe("capability tier gating", () => {
+  it("read-only excludes all write and admin tools", async () => {
+    const names = await toolNames(READ_ONLY);
+    expect(names).not.toContain("create_website");
+    expect(names).not.toContain("delete_website");
+    expect(names).not.toContain("send_event");
+    expect(names).not.toContain("list_users");
+  });
+
+  it("write tier adds mutations but NOT destructive tools", async () => {
+    const names = await toolNames(scopes({ write: true }));
+    expect(names).toContain("create_website");
+    expect(names).toContain("send_event");
+    expect(names).not.toContain("delete_website"); // destructive still gated
+    expect(names).not.toContain("reset_website");
+  });
+
+  it("destructive tier (with write) exposes delete/reset", async () => {
+    const names = await toolNames(scopes({ write: true, destructive: true }));
+    expect(names).toContain("delete_website");
+    expect(names).toContain("reset_website");
+  });
+
+  it("admin tier (self-hosted) exposes user administration", async () => {
+    const names = await toolNames(scopes({ admin: true }), "self-hosted");
+    expect(names).toContain("list_users");
+    expect(names).toContain("create_user");
+    expect(names).not.toContain("delete_user"); // destructive still gated
+  });
+
+  it("admin + destructive exposes delete_user", async () => {
+    const names = await toolNames(scopes({ admin: true, destructive: true }), "self-hosted");
+    expect(names).toContain("delete_user");
   });
 });

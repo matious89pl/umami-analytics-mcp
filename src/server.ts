@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ResolvedScopes } from "./capabilities";
 import { registerPrompts } from "./prompts/index";
 import { registerResources } from "./resources/index";
+import { registerAdminTools } from "./tools/admin";
 import { registerEventReadTools } from "./tools/events";
 import { registerMeTool } from "./tools/me";
 import { registerMetricsReadTools } from "./tools/metrics";
@@ -12,6 +13,7 @@ import { registerSessionReadTools } from "./tools/sessions";
 import { registerStatsReadTools } from "./tools/stats";
 import { registerTeamReadTools } from "./tools/teams";
 import { registerWebsiteReadTools } from "./tools/websites";
+import { registerWriteTools } from "./tools/write";
 import type { UmamiClient } from "./umami/client";
 import type { Deployment } from "./umami/types";
 import { VERSION, SERVER_NAME } from "./version";
@@ -58,10 +60,11 @@ export function registerAll(server: McpServer, ctx: UmamiContext): void {
   registerResources(server, ctx);
   registerPrompts(server, ctx);
 
-  // ── Write tier ─────────────────────────────────────────────────────────────
-  // Wired in Phase 4: if (ctx.scopes.write) registerWriteTools(server, ctx);
-  // ── Admin tier ─────────────────────────────────────────────────────────────
-  // Wired in Phase 4: if (ctx.scopes.admin) registerAdminTools(server, ctx);
+  // ── Write tier (opt-in: UMAMI_ENABLE_WRITE) ────────────────────────────────
+  if (ctx.scopes.write) registerWriteTools(server, ctx);
+
+  // ── Admin tier (opt-in: UMAMI_ENABLE_ADMIN; self-hosted only) ──────────────
+  if (ctx.scopes.admin) registerAdminTools(server, ctx);
 }
 
 /**
