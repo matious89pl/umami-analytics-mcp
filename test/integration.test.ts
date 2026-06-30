@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ResolvedScopes } from "../src/capabilities";
 import { createServer, type UmamiContext } from "../src/server";
 import { UmamiClient } from "../src/umami/client";
+import { registerSecret, resetSecrets } from "../src/util/redact";
 
 const READ_ONLY: ResolvedScopes = {
   read: true,
@@ -33,6 +34,7 @@ function makeContext(
     deployment,
     auth: { kind: "apiKey", apiKey: "test-key" },
     fetchImpl,
+    backoff: { retries: 0, baseMs: 1, maxMs: 1 }, // keep error-path tests fast
   });
   return { umami, scopes, deployment, defaults: { timezone: "UTC" } };
 }
@@ -105,5 +107,47 @@ describe("capability tier gating", () => {
   it("admin + destructive exposes delete_user", async () => {
     const names = await toolNames(scopes({ admin: true, destructive: true }), "self-hosted");
     expect(names).toContain("delete_user");
+  });
+});
+
+describe("end-to-end tool behavior", () => {
+  it("send_event posts the correct /send payload with a User-Agent", async () => {
+    let captured: { url: string; body: unknown; headers: Record<string, string> } | undefined;
+    const fetchImpl = (async (url: unknown, init: RequestInit = {}) => {
+      captured = {
+        url: String(url),
+        body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+        headers: (init.headers as Record<string, string>) ?? {},
+      };
+      return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+
+    const client = await connect(makeContext(fetchImpl, scopes({ write: true })));
+    const res = await client.callTool({
+      name: "send_event",
+      arguments: { websiteId: "w1", name: "signup", url: "/pricing", data: { plan: "pro" } },
+    });
+
+    expect(res.isError).toBeFalsy();
+    expect(captured?.url).toContain("/send");
+    expect(captured?.body).toMatchObject({
+      type: "event",
+      payload: { website: "w1", name: "signup", url: "/pricing", data: { plan: "pro" } },
+    });
+    expect(captured?.headers["user-agent"]).toBeTruthy();
+  });
+
+  it("returns tool errors as isError and never leaks the API key", async () => {
+    registerSecret("test-key"); // the apiKey used by makeContext
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ message: "rejected key test-key", code: "x" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch;
+    const client = await connect(makeContext(fetchImpl));
+    const res = await client.callTool({ name: "list_websites", arguments: {} });
+    expect(res.isError).toBe(true);
+    expect(JSON.stringify(res.content)).not.toContain("test-key");
+    resetSecrets();
   });
 });
