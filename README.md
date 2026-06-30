@@ -2,7 +2,7 @@
 
 > Security-first [Model Context Protocol](https://modelcontextprotocol.io) server for [Umami](https://umami.is) analytics — **Umami Cloud and self-hosted (v3)**. Set up, analyze, report on, and (when you allow it) administer your Umami instance from any MCP client.
 
-[![CI](https://github.com/msiatrak/umami-analytics-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/msiatrak/umami-analytics-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/matious89pl/umami-analytics-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/matious89pl/umami-analytics-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 - 🚀 **Local-first** — `npx umami-analytics-mcp`, zero build step, ~2 runtime deps.

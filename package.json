@@ -5,10 +5,13 @@
   "type": "module",
   "license": "MIT",
   "author": "Mateusz Siatrak <siatrak.mateusz@gmail.com>",
-  "homepage": "https://github.com/msiatrak/umami-analytics-mcp#readme",
+  "homepage": "https://github.com/matious89pl/umami-analytics-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/msiatrak/umami-analytics-mcp.git"
+    "url": "git+https://github.com/matious89pl/umami-analytics-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/matious89pl/umami-analytics-mcp/issues"
   },
   "keywords": [
     "mcp",
