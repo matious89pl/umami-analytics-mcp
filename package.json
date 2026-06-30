@@ -22,7 +22,8 @@
     "vercel"
   ],
   "bin": {
-    "umami-mcp": "./dist/cli.js"
+    "umami-mcp": "./dist/cli.js",
+    "umami-mcp-http": "./dist/http.js"
   },
   "exports": {
     ".": {

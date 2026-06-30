@@ -6,6 +6,7 @@ export default defineConfig({
   //  - server: the registration core, re-exported for consumers (e.g. the Vercel route)
   entry: {
     cli: "src/bin/cli.ts",
+    http: "src/bin/http.ts",
     server: "src/server.ts",
   },
   format: ["esm"],
