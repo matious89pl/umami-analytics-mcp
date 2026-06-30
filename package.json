@@ -1,0 +1,66 @@
+{
+  "name": "umami-analytics-mcp",
+  "version": "0.1.0",
+  "description": "Security-first MCP server for Umami analytics (Cloud + self-hosted): set up, analyze, report, and manage your instance from any MCP client.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Mateusz Siatrak <siatrak.mateusz@gmail.com>",
+  "homepage": "https://github.com/msiatrak/umami-analytics-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msiatrak/umami-analytics-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "umami",
+    "umami-analytics",
+    "analytics",
+    "llm",
+    "claude",
+    "ai",
+    "vercel"
+  ],
+  "bin": {
+    "umami-mcp": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "inspect": "npm run build && npx @modelcontextprotocol/inspector node ./dist/cli.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "mcp-handler": "^1.1.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
+  }
+}

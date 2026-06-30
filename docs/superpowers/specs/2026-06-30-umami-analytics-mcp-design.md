@@ -35,7 +35,9 @@ The reference is a clean Go server but **read-only** with **8 tools**. This serv
 
 | Package | Version | Role |
 |---|---|---|
-| `@modelcontextprotocol/sdk` | `^1.29.0` (floor `1.26.0` — security) | MCP server: `McpServer`, `registerTool`, stdio + Streamable-HTTP transports |
+| `@modelcontextprotocol/sdk` | **`1.26.0`** (exact — see note) | MCP server: `McpServer`, `registerTool`, stdio + Streamable-HTTP transports |
+
+> **SDK pin note:** `mcp-handler@1.1.0` declares an *exact* peer on `@modelcontextprotocol/sdk@1.26.0`, so the root pins `1.26.0` exactly. This is also the documented security floor (the pre-1.26.0 vulnerability is excluded), and it guarantees stdio and Vercel run the identical SDK build — the shared-core invariant.
 | `zod` | `^3.25` | Input/output schema validation (v3 to match `mcp-handler` peer) |
 | `mcp-handler` | `^1.1.0` | Vercel adapter: `createMcpHandler`, `withMcpAuth`, `protectedResourceHandler` (Vercel route only) |
 
