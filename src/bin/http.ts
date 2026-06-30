@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { describeScopes } from "../capabilities";
-import { buildContext, loadConfig } from "../config";
+import { applyEnvFileFlag, buildContext, loadConfig } from "../config";
 import { startHttpServer } from "../http/server";
 import { UmamiConfigError } from "../umami/errors";
 import { SERVER_NAME, VERSION } from "../version";
@@ -11,6 +11,7 @@ import { SERVER_NAME, VERSION } from "../version";
  * to run without auth (localhost development ONLY).
  */
 function main(): void {
+  applyEnvFileFlag(process.argv.slice(2));
   const config = loadConfig();
   const ctx = buildContext(config);
 

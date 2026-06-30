@@ -54,6 +54,45 @@ export function parseFlags(argv: readonly string[]): Record<string, FlagValue> {
 const truthy = (value: FlagValue | undefined): boolean =>
   value === true || (typeof value === "string" && /^(1|true|yes|on)$/i.test(value.trim()));
 
+/** Trim and strip one layer of matching surrounding quotes — defends against
+ * values accidentally quoted in a .env/config file (e.g. UMAMI_API_URL="..."). */
+function clean(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  let s = value.trim();
+  if (s.length >= 2) {
+    const a = s[0];
+    const b = s[s.length - 1];
+    if ((a === '"' && b === '"') || (a === "'" && b === "'")) s = s.slice(1, -1);
+  }
+  return s;
+}
+
+/**
+ * Honor a `--env-file <path>` / `--env-file=<path>` flag by loading that file
+ * into process.env BEFORE config is read. Opt-in only (no auto-loading), so an
+ * MCP client launching the server from an arbitrary cwd is never surprised.
+ */
+export function applyEnvFileFlag(argv: readonly string[] = process.argv.slice(2)): void {
+  let path: string | undefined;
+  const idx = argv.indexOf("--env-file");
+  if (idx !== -1) path = argv[idx + 1];
+  else {
+    const eq = argv.find((a) => a.startsWith("--env-file="));
+    if (eq) path = eq.slice("--env-file=".length);
+  }
+  if (!path) return;
+  const loader = (process as { loadEnvFile?: (p?: string) => void }).loadEnvFile;
+  if (typeof loader !== "function") {
+    console.error("--env-file requires Node >= 20.12");
+    return;
+  }
+  try {
+    loader.call(process, path);
+  } catch (err) {
+    console.error(`Failed to load --env-file ${path}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 function normalizeHost(raw: string): string {
   let host = raw.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(host)) host = `https://${host}`;
@@ -73,15 +112,15 @@ export function loadConfig(
   const flag = (name: string): string | undefined =>
     typeof flags[name] === "string" ? (flags[name] as string) : undefined;
 
-  const apiKey = env.UMAMI_API_KEY?.trim() || undefined;
-  const apiUrl = flag("api-url") ?? env.UMAMI_API_URL?.trim() ?? undefined;
-  const username = env.UMAMI_USERNAME?.trim() || undefined;
-  const password = env.UMAMI_PASSWORD || undefined;
-  const regionRaw = flag("cloud-region") ?? env.UMAMI_CLOUD_REGION?.trim();
-  const teamId = flag("team-id") ?? env.UMAMI_TEAM_ID?.trim() ?? undefined;
-  const timezone = flag("timezone") ?? env.UMAMI_DEFAULT_TIMEZONE?.trim() ?? "UTC";
-  const sendUrl = flag("send-url") ?? env.UMAMI_SEND_URL?.trim() ?? undefined;
-  const mcpAuthToken = env.MCP_AUTH_TOKEN?.trim() || undefined;
+  const apiKey = clean(env.UMAMI_API_KEY) || undefined;
+  const apiUrl = clean(flag("api-url") ?? env.UMAMI_API_URL) || undefined;
+  const username = clean(env.UMAMI_USERNAME) || undefined;
+  const password = env.UMAMI_PASSWORD || undefined; // literal — never dequoted/trimmed
+  const regionRaw = clean(flag("cloud-region") ?? env.UMAMI_CLOUD_REGION);
+  const teamId = clean(flag("team-id") ?? env.UMAMI_TEAM_ID) || undefined;
+  const timezone = clean(flag("timezone") ?? env.UMAMI_DEFAULT_TIMEZONE) || "UTC";
+  const sendUrl = clean(flag("send-url") ?? env.UMAMI_SEND_URL) || undefined;
+  const mcpAuthToken = clean(env.MCP_AUTH_TOKEN) || undefined;
 
   // Register secrets for redaction as early as possible.
   registerSecret(apiKey);

@@ -90,6 +90,29 @@ describe("loadConfig — scopes", () => {
   });
 });
 
+describe("loadConfig — value sanitization", () => {
+  it("strips accidental surrounding quotes from the URL", () => {
+    const cfg = loadConfig(
+      { UMAMI_API_URL: '"https://stats.example.com"', UMAMI_USERNAME: "admin", UMAMI_PASSWORD: "pw" },
+      NO_ARGS,
+    );
+    expect(cfg.baseUrl).toBe("https://stats.example.com/api");
+  });
+
+  it("strips quotes from a cloud API key", () => {
+    const cfg = loadConfig({ UMAMI_API_KEY: "'mykey'" }, NO_ARGS);
+    expect(cfg.auth).toEqual({ kind: "apiKey", apiKey: "mykey" });
+  });
+
+  it("keeps the password literal (does not dequote)", () => {
+    const cfg = loadConfig(
+      { UMAMI_API_URL: "https://x.com", UMAMI_USERNAME: "admin", UMAMI_PASSWORD: '"quoted-pw"' },
+      NO_ARGS,
+    );
+    expect(cfg.auth).toEqual({ kind: "login", username: "admin", password: '"quoted-pw"' });
+  });
+});
+
 describe("loadConfig — secret registration", () => {
   it("registers credentials for redaction", () => {
     loadConfig({ UMAMI_API_KEY: "top-secret-key" }, NO_ARGS);

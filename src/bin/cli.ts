@@ -2,7 +2,7 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { describeScopes } from "../capabilities";
-import { buildContext, loadConfig } from "../config";
+import { applyEnvFileFlag, buildContext, loadConfig } from "../config";
 import { createServer } from "../server";
 import { UmamiConfigError } from "../umami/errors";
 import { SERVER_NAME, VERSION } from "../version";
@@ -22,8 +22,12 @@ Capability tiers (default: read-only):
   UMAMI_ENABLE_ADMIN=1        expose user-management tools (self-hosted only)
   UMAMI_ALLOW_DESTRUCTIVE=1   also required for delete/reset tools
 
+Local convenience:
+  --env-file <path>           load KEY=VALUE pairs from a .env file first
+                              (e.g. --env-file .env.local)
+
 Flags: --api-url --cloud-region --team-id --timezone --write --admin
-       --allow-destructive --help --version
+       --allow-destructive --env-file --help --version
 `;
 
 /**
@@ -43,6 +47,7 @@ async function main(): Promise<void> {
     return;
   }
 
+  applyEnvFileFlag(argv);
   const config = loadConfig();
   const context = buildContext(config);
   const server = createServer(context);

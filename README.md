@@ -60,6 +60,12 @@ All configuration is via environment variables (secrets) and optional CLI flags 
 
 > Self-hosted instances that issue API keys can use `UMAMI_API_URL` + `UMAMI_API_KEY` instead of username/password.
 
+Surrounding quotes are stripped from values defensively. For local use you can keep settings in a file and load them with `--env-file`:
+
+```bash
+npx umami-analytics-mcp --env-file .env.local
+```
+
 Run `npx umami-analytics-mcp --help` for the full flag list.
 
 ---
