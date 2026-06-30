@@ -17,11 +17,36 @@ import {
   websiteIdShape,
 } from "./shared";
 
+/** Dimensions accepted by the breakdown report (Umami v3 `fieldsParam` enum). */
+const BREAKDOWN_FIELDS = [
+  "path",
+  "referrer",
+  "title",
+  "query",
+  "os",
+  "browser",
+  "device",
+  "country",
+  "region",
+  "city",
+  "tag",
+  "hostname",
+  "distinctId",
+  "language",
+  "event",
+  "utmSource",
+  "utmMedium",
+  "utmCampaign",
+  "utmContent",
+  "utmTerm",
+] as const;
+
 /**
  * Reports are POST-with-body **reads**. Umami v3 expects:
  *   { websiteId, type, filters, parameters: { startDate, endDate, ...specific } }
- * where startDate/endDate are ISO strings inside `parameters`. The write tier is
- * not required for these.
+ * where startDate/endDate are ISO strings inside `parameters`, and `type` is one
+ * of: attribution, breakdown, funnel, goal, journey, retention, revenue, utm.
+ * The write tier is not required for these.
  */
 export function registerReportReadTools(server: McpServer, ctx: UmamiContext): void {
   const isoRange = (args: { range?: string; startAt?: string | number; endAt?: string | number }) => {
@@ -233,47 +258,19 @@ export function registerReportReadTools(server: McpServer, ctx: UmamiContext): v
       inputSchema: {
         ...websiteIdShape,
         ...dateRangeShape,
-        fields: z.array(z.string()).min(1).describe("Dimensions to group by."),
+        fields: z
+          .array(z.enum(["url", ...BREAKDOWN_FIELDS]))
+          .min(1)
+          .describe("Dimensions to group by (e.g. ['country','browser']). 'url' is an alias for 'path'."),
         ...filterShape,
       },
       outputSchema: { data: z.unknown() },
       annotations: { readOnlyHint: true },
     },
     async (args) => {
-      const data = await runReport(
-        "breakdown",
-        args.websiteId,
-        { ...isoRange(args), fields: args.fields },
-        pickFilters(args),
-      );
-      return ok({ data }, `Breakdown over ${args.fields.join(", ")}.`);
-    },
-  );
-
-  reg(
-    server,
-    "report_performance",
-    {
-      title: "Web-vitals performance report",
-      description: "Core Web Vitals over time (LCP, INP, CLS, FCP, TTFB). `metric` selects which vital; bucket by `unit`.",
-      inputSchema: {
-        ...websiteIdShape,
-        ...dateRangeShape,
-        ...timezoneShape,
-        metric: z.enum(["lcp", "inp", "cls", "fcp", "ttfb"]).optional(),
-        unit: z.enum(["minute", "hour", "day", "month", "year"]).optional(),
-      },
-      outputSchema: { data: z.unknown() },
-      annotations: { readOnlyHint: true },
-    },
-    async (args) => {
-      const data = await runReport("performance", args.websiteId, {
-        ...isoRange(args),
-        timezone: tzOf(ctx, args.timezone),
-        metric: args.metric,
-        unit: args.unit,
-      });
-      return ok({ data }, "Performance report computed.");
+      const fields = args.fields.map((f) => (f === "url" ? "path" : f));
+      const data = await runReport("breakdown", args.websiteId, { ...isoRange(args), fields }, pickFilters(args));
+      return ok({ data }, `Breakdown over ${fields.join(", ")}.`);
     },
   );
 

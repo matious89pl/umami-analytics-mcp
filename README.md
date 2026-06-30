@@ -37,7 +37,7 @@ npx -y umami-analytics-mcp
 
 …with credentials supplied via environment variables. For **Umami Cloud**, create an API key at *Dashboard → Settings → API keys* and set `UMAMI_API_KEY`. For **self-hosted**, set `UMAMI_API_URL` + `UMAMI_USERNAME` + `UMAMI_PASSWORD`. See [MCP client setup](#mcp-client-setup) for copy-paste configs.
 
-By default the server is **read-only** (33 analytics tools). Opt into writes/admin explicitly — see [Capability tiers](#capability-tiers).
+By default the server is **read-only** (32 analytics tools). Opt into writes/admin explicitly — see [Capability tiers](#capability-tiers).
 
 ---
 
@@ -81,7 +81,7 @@ The server exposes only the tools for the tiers you enable, layered **on top of*
 | **admin** | `UMAMI_ENABLE_ADMIN=1` _(self-hosted)_ | user administration | `create_user`, `set_user_role` |
 | **destructive** | `UMAMI_ALLOW_DESTRUCTIVE=1` _(+ write/admin)_ | delete / reset | `delete_website`, `reset_website`, `delete_user` |
 
-Tool counts: **33** read → **47** with write → **53** with destructive → **59** at full tier on self-hosted. On Cloud the admin tier is automatically disabled (Umami Cloud has no user-admin API) and the server explains why at startup. Destructive tools carry MCP `destructiveHint` annotations so clients can warn before running them.
+Tool counts: **32** read → **46** with write → **52** with destructive → **58** at full tier on self-hosted. On Cloud the admin tier is automatically disabled (Umami Cloud has no user-admin API) and the server explains why at startup. Destructive tools carry MCP `destructiveHint` annotations so clients can warn before running them.
 
 ---
 
@@ -186,9 +186,9 @@ See [SECURITY.md](SECURITY.md) for the full threat model and disclosure policy.
 ## Tool reference
 
 <details open>
-<summary><strong>Read tier (33 — always on)</strong></summary>
+<summary><strong>Read tier (32 — always on)</strong></summary>
 
-`list_websites` · `get_website` · `get_website_daterange` · `get_active_visitors` · `get_realtime` · `get_stats` · `get_pageviews` · `get_metrics` · `get_website_values` · `get_events` · `get_event_data` · `list_sessions` · `get_session` · `get_session_activity` · `get_session_stats` · `get_session_properties` · `report_funnel` · `report_retention` · `report_journey` · `report_goals` · `report_attribution` · `report_revenue` · `report_utm` · `report_breakdown` · `report_performance` · `list_reports` · `get_report` · `list_segments` · `get_segment` · `list_teams` · `get_team` · `get_team_members` · `get_me`
+`list_websites` · `get_website` · `get_website_daterange` · `get_active_visitors` · `get_realtime` · `get_stats` · `get_pageviews` · `get_metrics` · `get_website_values` · `get_events` · `get_event_data` · `list_sessions` · `get_session` · `get_session_activity` · `get_session_stats` · `get_session_properties` · `report_funnel` · `report_retention` · `report_journey` · `report_goals` · `report_attribution` · `report_revenue` · `report_utm` · `report_breakdown` · `list_reports` · `get_report` · `list_segments` · `get_segment` · `list_teams` · `get_team` · `get_team_members` · `get_me`
 </details>
 
 <details>
